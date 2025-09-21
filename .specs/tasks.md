@@ -80,7 +80,7 @@
         PiNetwork {
             error_name: String,
             error_message: String,
-            payment: Option<crate::models::Payment>,
+            payment: Option<crate::models::PaymentDto>,
         },
 
         #[error("Authentication failed: {0}")]
@@ -234,62 +234,35 @@
   - **Implement auth models in `src/models/auth.rs`**:
 
     ```rust
-    use chrono::{DateTime, Utc};
     use serde::{Deserialize, Serialize};
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct UserProfile {
-        #[serde(rename = "accessToken")]
-        pub access_token: String,
-        pub user: User,
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct User {
+    pub struct UserDto {
         pub uid: String,
         pub username: String,
-        pub credentials: Credentials,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct Credentials {
-        pub scopes: Vec<String>,
-        #[serde(rename = "valid_until")]
-        pub valid_until: ValidTime,
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct ValidTime {
-        pub timestamp: i64,
-        pub iso8601: DateTime<Utc>,
-    }
+    // Note: The access token is provided by the client when making requests,
+    // not returned in the UserDTO response from the API
     ```
 
   - **Implement payment models in `src/models/payment.rs`**:
 
     ```rust
-    use chrono::{DateTime, Utc};
     use serde::{Deserialize, Serialize};
-    use uuid::Uuid;
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct Payment {
+    pub struct PaymentDto {
         pub identifier: String,
-        #[serde(rename = "user_uid")]
-        pub user_uid: String,
+        #[serde(rename = "Pioneer_uid")]
+        pub pioneer_uid: String,
         pub amount: f64,
-        pub memo: Option<String>,
-        pub metadata: Option<Metadata>,
-        #[serde(rename = "from_address")]
-        pub from_address: Option<String>,
-        #[serde(rename = "to_address")]
-        pub to_address: Option<String>,
-        #[serde(rename = "created_at")]
-        pub created_at: DateTime<Utc>,
-        pub direction: String,
-        pub network: String,
+        pub memo: String,
+        pub metadata: serde_json::Value,
+        pub to_address: String,
+        pub created_at: String,
         pub status: PaymentStatus,
-        pub transaction: Option<TransactionStatus>,
+        pub transaction: Option<TransactionData>,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -297,45 +270,26 @@
         pub developer_approved: bool,
         pub transaction_verified: bool,
         pub developer_completed: bool,
-        pub cancelled: bool,
-        pub user_cancelled: bool,
+        pub canceled: bool,
+        #[serde(rename = "Pioneer_cancelled")]
+        pub pioneer_cancelled: bool,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct Metadata {
-        pub id: Option<Uuid>,
-        #[serde(rename = "cat")]
-        pub category: Option<String>,
-        pub data: Option<serde_json::Value>,
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct TransactionStatus {
-        #[serde(rename = "txid")]
-        pub tx_id: Option<String>,
+    pub struct TransactionData {
+        pub txid: String,
         pub verified: bool,
         #[serde(rename = "_link")]
-        pub link: Option<String>,
+        pub link: String,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct CreatePaymentRequest {
-        pub payment: PaymentArgs,
+    pub struct CompletePaymentRequest {
+        pub txid: String,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct PaymentArgs {
-        pub amount: f64,
-        pub memo: Option<String>,
-        pub metadata: Option<serde_json::Value>,
-        pub uid: String,
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct IncompleteServerPayments {
-        #[serde(rename = "incomplete_server_payments")]
-        pub incomplete_payments: Vec<Payment>,
-    }
+    // Note: Payment creation is handled client-side via Pi App Platform SDK,
+    // not through server APIs, so CreatePaymentRequest is not needed
     ```
 
   - **Implement Stellar models in `src/models/stellar.rs`**:
@@ -392,13 +346,13 @@
 
     ```rust
     use serde::{Deserialize, Serialize};
-    use crate::models::Payment;
+    use crate::models::PaymentDto;
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct PiNetworkError {
         pub error: String,
         pub error_message: String,
-        pub payment: Option<Payment>,
+        pub payment: Option<PaymentDto>,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -680,13 +634,13 @@
     };
 
     impl PiNetworkClient {
-        /// Retrieve user profile information using an access token
+        /// Retrieve user information using an access token
         ///
         /// # Arguments
         /// * `access_token` - The user's access token from Pi Network authentication
         ///
         /// # Returns
-        /// * `Result<UserProfile>` - User profile with credentials and scopes
+        /// * `Result<UserDto>` - User information with uid and username
         ///
         /// # Example
         /// ```rust
@@ -695,12 +649,12 @@
         /// #[tokio::main]
         /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ///     let client = PiNetworkClient::new("your-api-key".to_string())?;
-        ///     let profile = client.get_user_profile("user-access-token").await?;
-        ///     println!("User: {} ({})", profile.user.username, profile.user.uid);
+        ///     let user = client.get_user_info("user-access-token").await?;
+        ///     println!("User: {} ({})", user.username, user.uid);
         ///     Ok(())
         /// }
         /// ```
-        pub async fn get_user_profile(&self, access_token: &str) -> Result<UserProfile> {
+        pub async fn get_user_info(&self, access_token: &str) -> Result<UserDto> {
             if access_token.is_empty() {
                 return Err(PiError::Authentication("Access token cannot be empty".to_string()));
             }
@@ -726,7 +680,7 @@
         /// # Returns
         /// * `Result<bool>` - True if token is valid, false otherwise
         pub async fn validate_access_token(&self, access_token: &str) -> Result<bool> {
-            match self.get_user_profile(access_token).await {
+            match self.get_user_info(access_token).await {
                 Ok(_) => Ok(true),
                 Err(PiError::Authentication(_)) => Ok(false),
                 Err(e) => Err(e),
@@ -747,27 +701,17 @@
         use chrono::Utc;
 
         #[tokio::test]
-        async fn test_get_user_profile_success() {
+        async fn test_get_user_info_success() {
             let mock_server = MockServer::start().await;
-            let expected_profile = crate::models::UserProfile {
-                access_token: "token123".to_string(),
-                user: crate::models::User {
-                    uid: "user123".to_string(),
-                    username: "testuser".to_string(),
-                    credentials: crate::models::Credentials {
-                        scopes: vec!["payments".to_string()],
-                        valid_until: crate::models::ValidTime {
-                            timestamp: 1234567890,
-                            iso8601: Utc::now(),
-                        },
-                    },
-                },
+            let expected_user = crate::models::UserDto {
+                uid: "user123".to_string(),
+                username: "testuser".to_string(),
             };
 
             Mock::given(method("GET"))
                 .and(path("/me"))
                 .and(header("authorization", "Bearer valid-token"))
-                .respond_with(ResponseTemplate::new(200).set_body_json(&expected_profile))
+                .respond_with(ResponseTemplate::new(200).set_body_json(&expected_user))
                 .mount(&mock_server)
                 .await;
 
@@ -776,9 +720,9 @@
                 .build();
             let client = PiNetworkClient::with_config(config).unwrap();
 
-            let result = client.get_user_profile("valid-token").await.unwrap();
-            assert_eq!(result.user.uid, "user123");
-            assert_eq!(result.user.username, "testuser");
+            let result = client.get_user_info("valid-token").await.unwrap();
+            assert_eq!(result.uid, "user123");
+            assert_eq!(result.username, "testuser");
         }
 
         #[tokio::test]
@@ -883,19 +827,19 @@
     ````rust
     use crate::{
         client::PiNetworkClient,
-        models::{Payment, CreatePaymentRequest, PaymentArgs, IncompleteServerPayments, TransactionId},
+        models::{PaymentDto, CompletePaymentRequest},
         errors::PiError,
         Result,
     };
 
     impl PiNetworkClient {
-        /// Create a new payment request
+        /// Retrieve a payment by its payment_id
         ///
         /// # Arguments
-        /// * `amount` - Payment amount in Pi
-        /// * `memo` - Optional memo for the payment
-        /// * `metadata` - Optional metadata as JSON value
-        /// * `user_uid` - User ID from Pi Network authentication
+        /// * `payment_id` - The payment identifier
+        ///
+        /// # Returns
+        /// * `Result<PaymentDto>` - The payment details
         ///
         /// # Example
         /// ```rust
@@ -904,67 +848,17 @@
         /// #[tokio::main]
         /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ///     let client = PiNetworkClient::new("your-api-key".to_string())?;
-        ///     let payment = client.create_payment(
-        ///         10.5,
-        ///         Some("Coffee purchase".to_string()),
-        ///         None,
-        ///         "user123".to_string()
-        ///     ).await?;
-        ///     println!("Created payment: {}", payment.identifier);
+        ///     let payment = client.get_payment("payment_id_here").await?;
+        ///     println!("Payment amount: {} Pi", payment.amount);
         ///     Ok(())
         /// }
         /// ```
-        pub async fn create_payment(
-            &self,
-            amount: f64,
-            memo: Option<String>,
-            metadata: Option<serde_json::Value>,
-            user_uid: String,
-        ) -> Result<Payment> {
-            if amount <= 0.0 {
-                return Err(PiError::Configuration("Payment amount must be positive".to_string()));
+        pub async fn get_payment(&self, payment_id: &str) -> Result<PaymentDto> {
+            if payment_id.is_empty() {
+                return Err(PiError::Configuration("Payment ID cannot be empty".to_string()));
             }
 
-            if user_uid.is_empty() {
-                return Err(PiError::Configuration("User UID cannot be empty".to_string()));
-            }
-
-            let request_body = CreatePaymentRequest {
-                payment: PaymentArgs {
-                    amount,
-                    memo,
-                    metadata,
-                    uid: user_uid,
-                },
-            };
-
-            let request = self.post("/payments");
-            let request = self.with_api_key_auth(request);
-            let request = request.json(&request_body);
-
-            let mut payment: Payment = self.execute_request(request).await?;
-
-            // If payment was created but doesn't have to_address, fetch it again
-            if payment.to_address.is_none() && !payment.identifier.is_empty() {
-                payment = self.get_payment(&payment.identifier).await?;
-            }
-
-            Ok(payment)
-        }
-
-        /// Retrieve a payment by its identifier
-        ///
-        /// # Arguments
-        /// * `identifier` - The payment identifier
-        ///
-        /// # Returns
-        /// * `Result<Payment>` - The payment details
-        pub async fn get_payment(&self, identifier: &str) -> Result<Payment> {
-            if identifier.is_empty() {
-                return Err(PiError::Configuration("Payment identifier cannot be empty".to_string()));
-            }
-
-            let path = format!("/payments/{}", identifier);
+            let path = format!("/payments/{}", payment_id);
             let request = self.get(&path);
             let request = self.with_api_key_auth(request);
 
@@ -974,35 +868,16 @@
         /// Approve a payment (developer approval)
         ///
         /// # Arguments
-        /// * `identifier` - The payment identifier to approve
+        /// * `payment_id` - The payment identifier to approve
         ///
         /// # Returns
-        /// * `Result<Payment>` - The updated payment with approval status
-        pub async fn approve_payment(&self, identifier: &str) -> Result<Payment> {
-            if identifier.is_empty() {
-                return Err(PiError::Configuration("Payment identifier cannot be empty".to_string()));
+        /// * `Result<PaymentDto>` - The updated payment with approval status
+        pub async fn approve_payment(&self, payment_id: &str) -> Result<PaymentDto> {
+            if payment_id.is_empty() {
+                return Err(PiError::Configuration("Payment ID cannot be empty".to_string()));
             }
 
-            let path = format!("/payments/{}/approve", identifier);
-            let request = self.post(&path);
-            let request = self.with_api_key_auth(request);
-
-            self.execute_request(request).await
-        }
-
-        /// Cancel a payment
-        ///
-        /// # Arguments
-        /// * `identifier` - The payment identifier to cancel
-        ///
-        /// # Returns
-        /// * `Result<Payment>` - The updated payment with cancelled status
-        pub async fn cancel_payment(&self, identifier: &str) -> Result<Payment> {
-            if identifier.is_empty() {
-                return Err(PiError::Configuration("Payment identifier cannot be empty".to_string()));
-            }
-
-            let path = format!("/payments/{}/cancel", identifier);
+            let path = format!("/payments/{}/approve", payment_id);
             let request = self.post(&path);
             let request = self.with_api_key_auth(request);
 
@@ -1012,23 +887,23 @@
         /// Complete a payment with transaction ID
         ///
         /// # Arguments
-        /// * `identifier` - The payment identifier to complete
+        /// * `payment_id` - The payment identifier to complete
         /// * `tx_id` - The blockchain transaction ID
         ///
         /// # Returns
-        /// * `Result<Payment>` - The completed payment
-        pub async fn complete_payment(&self, identifier: &str, tx_id: &str) -> Result<Payment> {
-            if identifier.is_empty() {
-                return Err(PiError::Configuration("Payment identifier cannot be empty".to_string()));
+        /// * `Result<PaymentDto>` - The completed payment
+        pub async fn complete_payment(&self, payment_id: &str, tx_id: &str) -> Result<PaymentDto> {
+            if payment_id.is_empty() {
+                return Err(PiError::Configuration("Payment ID cannot be empty".to_string()));
             }
 
             if tx_id.is_empty() {
                 return Err(PiError::Configuration("Transaction ID cannot be empty".to_string()));
             }
 
-            let path = format!("/payments/{}/complete", identifier);
-            let request_body = TransactionId {
-                tx_id: tx_id.to_string(),
+            let path = format!("/payments/{}/complete", payment_id);
+            let request_body = CompletePaymentRequest {
+                txid: tx_id.to_string(),
             };
 
             let request = self.post(&path);
@@ -1036,18 +911,6 @@
             let request = request.json(&request_body);
 
             self.execute_request(request).await
-        }
-
-        /// Get all incomplete server payments
-        ///
-        /// # Returns
-        /// * `Result<Vec<Payment>>` - List of payments requiring server completion
-        pub async fn get_incomplete_payments(&self) -> Result<Vec<Payment>> {
-            let request = self.get("/payments/incomplete_server_payments");
-            let request = self.with_api_key_auth(request);
-
-            let response: IncompleteServerPayments = self.execute_request(request).await?;
-            Ok(response.incomplete_payments)
         }
     }
     ````
@@ -1064,84 +927,28 @@
         use chrono::Utc;
         use serde_json::json;
 
-        fn create_test_payment() -> Payment {
-            Payment {
+        fn create_test_payment() -> PaymentDto {
+            PaymentDto {
                 identifier: "payment123".to_string(),
-                user_uid: "user123".to_string(),
+                pioneer_uid: "user123".to_string(),
                 amount: 10.5,
-                memo: Some("Test payment".to_string()),
-                metadata: None,
-                from_address: Some("GTEST123".to_string()),
-                to_address: Some("GTEST456".to_string()),
-                created_at: Utc::now(),
-                direction: "user_to_app".to_string(),
-                network: "Pi Testnet".to_string(),
+                memo: "Test payment".to_string(),
+                metadata: serde_json::json!({"test": true}),
+                to_address: "GTEST456".to_string(),
+                created_at: "2023-01-01T00:00:00Z".to_string(),
                 status: crate::models::PaymentStatus {
                     developer_approved: false,
                     transaction_verified: false,
                     developer_completed: false,
-                    cancelled: false,
-                    user_cancelled: false,
+                    canceled: false,
+                    pioneer_cancelled: false,
                 },
                 transaction: None,
             }
         }
 
-        #[tokio::test]
-        async fn test_create_payment_success() {
-            let mock_server = MockServer::start().await;
-            let expected_payment = create_test_payment();
-            let expected_request = json!({
-                "payment": {
-                    "amount": 10.5,
-                    "memo": "Test payment",
-                    "metadata": null,
-                    "uid": "user123"
-                }
-            });
-
-            Mock::given(method("POST"))
-                .and(path("/payments"))
-                .and(header("authorization", "Key test-key"))
-                .and(body_json(&expected_request))
-                .respond_with(ResponseTemplate::new(200).set_body_json(&expected_payment))
-                .mount(&mock_server)
-                .await;
-
-            let config = ClientConfig::builder("test-key".to_string())
-                .base_url(mock_server.uri().parse().unwrap())
-                .build();
-            let client = PiNetworkClient::with_config(config).unwrap();
-
-            let result = client.create_payment(
-                10.5,
-                Some("Test payment".to_string()),
-                None,
-                "user123".to_string(),
-            ).await.unwrap();
-
-            assert_eq!(result.identifier, "payment123");
-            assert_eq!(result.amount, 10.5);
-        }
-
-        #[tokio::test]
-        async fn test_create_payment_invalid_amount() {
-            let client = PiNetworkClient::new("test-key".to_string()).unwrap();
-
-            let result = client.create_payment(
-                -5.0,
-                None,
-                None,
-                "user123".to_string(),
-            ).await;
-
-            match result {
-                Err(PiError::Configuration(msg)) => {
-                    assert_eq!(msg, "Payment amount must be positive");
-                }
-                _ => panic!("Expected configuration error for negative amount"),
-            }
-        }
+        // Note: Payment creation is handled client-side, so we don't test it here
+        // Instead, we test the server-side operations: get, approve, and complete
 
         #[tokio::test]
         async fn test_get_payment_success() {
@@ -1191,10 +998,10 @@
             let mock_server = MockServer::start().await;
             let mut completed_payment = create_test_payment();
             completed_payment.status.developer_completed = true;
-            completed_payment.transaction = Some(crate::models::TransactionStatus {
-                tx_id: Some("tx123".to_string()),
+            completed_payment.transaction = Some(crate::models::TransactionData {
+                txid: "tx123".to_string(),
                 verified: true,
-                link: Some("https://stellar.expert/explorer/testnet/tx/tx123".to_string()),
+                link: "https://stellar.expert/explorer/testnet/tx/tx123".to_string(),
             });
 
             let expected_request = json!({
@@ -1216,32 +1023,7 @@
 
             let result = client.complete_payment("payment123", "tx123").await.unwrap();
             assert!(result.status.developer_completed);
-            assert_eq!(result.transaction.as_ref().unwrap().tx_id.as_ref().unwrap(), "tx123");
-        }
-
-        #[tokio::test]
-        async fn test_get_incomplete_payments() {
-            let mock_server = MockServer::start().await;
-            let incomplete_payment = create_test_payment();
-            let response = IncompleteServerPayments {
-                incomplete_payments: vec![incomplete_payment.clone()],
-            };
-
-            Mock::given(method("GET"))
-                .and(path("/payments/incomplete_server_payments"))
-                .and(header("authorization", "Key test-key"))
-                .respond_with(ResponseTemplate::new(200).set_body_json(&response))
-                .mount(&mock_server)
-                .await;
-
-            let config = ClientConfig::builder("test-key".to_string())
-                .base_url(mock_server.uri().parse().unwrap())
-                .build();
-            let client = PiNetworkClient::with_config(config).unwrap();
-
-            let result = client.get_incomplete_payments().await.unwrap();
-            assert_eq!(result.len(), 1);
-            assert_eq!(result[0].identifier, "payment123");
+            assert_eq!(result.transaction.as_ref().unwrap().txid, "tx123");
         }
     }
     ```
@@ -3368,33 +3150,20 @@
         assert!(!profile.user.uid.is_empty());
         assert!(!profile.user.username.is_empty());
 
-        // Test payment creation
-        let payment = client.create_payment(
-            1.0,
-            Some("Integration test payment".to_string()),
-            Some(serde_json::json!({"test": true})),
-            profile.user.uid.clone(),
-        ).await.unwrap();
+        // Note: Payment creation is handled client-side via Pi App Platform SDK
+        // For integration tests, we would test with existing payment IDs
 
-        assert!(!payment.identifier.is_empty());
-        assert_eq!(payment.amount, 1.0);
-        assert_eq!(payment.user_uid, profile.user.uid);
+        // Test payment retrieval (would use actual payment ID from client-side creation)
+        // let payment = client.get_payment("actual_payment_id").await.unwrap();
+        // assert!(!payment.identifier.is_empty());
 
-        // Test payment retrieval
-        let retrieved = client.get_payment(&payment.identifier).await.unwrap();
-        assert_eq!(retrieved.identifier, payment.identifier);
+        // Test payment approval (would use actual payment ID)
+        // let approved = client.approve_payment("actual_payment_id").await.unwrap();
+        // assert!(approved.status.developer_approved);
 
-        // Test payment approval
-        let approved = client.approve_payment(&payment.identifier).await.unwrap();
-        assert!(approved.status.developer_approved);
-
-        // Test getting incomplete payments
-        let incomplete = client.get_incomplete_payments().await.unwrap();
-        assert!(incomplete.iter().any(|p| p.identifier == payment.identifier));
-
-        // Cancel the test payment to clean up
-        let cancelled = client.cancel_payment(&payment.identifier).await.unwrap();
-        assert!(cancelled.status.cancelled);
+        // Test payment completion (would use actual payment ID and transaction ID)
+        // let completed = client.complete_payment("actual_payment_id", "actual_tx_id").await.unwrap();
+        // assert!(completed.status.developer_completed);
     }
 
     #[tokio::test]
@@ -3456,8 +3225,8 @@
         let result = client.get_payment("nonexistent-payment-id").await;
         assert!(matches!(result, Err(PiError::PiNetwork { .. })));
 
-        // Test invalid payment parameters
-        let result = client.create_payment(-1.0, None, None, "invalid".to_string()).await;
+        // Test invalid payment ID
+        let result = client.get_payment("").await;
         assert!(matches!(result, Err(PiError::Configuration(_))));
     }
     ```
