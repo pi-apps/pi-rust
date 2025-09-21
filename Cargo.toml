@@ -1,0 +1,25 @@
+[package]
+name = "pi-rust"
+version = "0.1.0"
+edition = "2024"
+authors = ["Gideon Bature <infoaboutgideon@gmail.com>"]
+description = "Pi Network Rust SDK for server-side applications"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/pi-apps/pi-rust"
+keywords = ["pi-network", "blockchain", "stellar", "payments"]
+categories = ["api-bindings", "cryptocurrency"]
+
+[dependencies]
+tokio = { version = "1.0", features = ["full"] }
+reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+url = "2.0"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+[dev-dependencies]
+wiremock = "0.5"
+criterion = "0.5"
+tokio-test = "0.4"
