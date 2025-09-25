@@ -1,0 +1,45 @@
+name: Security Audit
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run security audit daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+jobs:
+  security_audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run security audit
+        run: cargo audit
+
+      - name: Check for unsafe code
+        run: |
+          if grep -r "unsafe" src/; then
+            echo "::warning::Found unsafe code - please review"
+            exit 1
+          else
+            echo "No unsafe code found"
+          fi
+
+      - name: Check for hardcoded secrets
+        run: |
+          if grep -r -i "password\|secret\|key\|token" src/ --include="*.rs" | grep -v "// " | grep -v "pub " | grep -v "test"; then
+            echo "::warning::Potential hardcoded secrets found - please review"
+            exit 1
+          else
+            echo "No hardcoded secrets found"
+          fi
