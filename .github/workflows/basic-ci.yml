@@ -1,0 +1,66 @@
+name: Basic CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  basic-checks:
+    name: Basic Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-basic-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Check formatting
+        run: |
+          if [ -f "src/lib.rs" ] || [ -f "src/main.rs" ]; then
+            cargo fmt --all -- --check
+          else
+            echo "No Rust source files found, skipping format check"
+          fi
+
+      - name: Run clippy
+        run: |
+          if [ -f "Cargo.toml" ]; then
+            cargo clippy --all-targets --all-features -- -D warnings
+          else
+            echo "No Cargo.toml found, skipping clippy"
+          fi
+
+      - name: Run cargo check
+        run: |
+          if [ -f "Cargo.toml" ]; then
+            cargo check --all-targets --all-features
+          else
+            echo "No Cargo.toml found, skipping check"
+          fi
+
+      - name: Run tests
+        run: |
+          if [ -f "Cargo.toml" ]; then
+            cargo test --all-features
+          else
+            echo "No Cargo.toml found, skipping tests"
+          fi

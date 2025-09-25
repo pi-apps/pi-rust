@@ -19,7 +19,7 @@ A comprehensive, type-safe, and async-first Rust SDK for integrating with Pi Net
 
 ## Project Vision
 
-This SDK aims to provide a comprehensive Rust interface for Pi Network APIs, based on the existing [official C# SDK](https://github.com/pi-apps/pi-platform-docs/tree/master/SDK) developed by the Pi Network team. The goal is to bring the same functionality to the Rust ecosystem with idiomatic Rust patterns and modern async/await support.
+This SDK aims to provide a comprehensive Rust interface for Pi Network APIs, based on the existing [official C# SDK](https://github.com/pi-apps/pi-csharp#) developed by the Pi Network team. The goal is to bring the same functionality to the Rust ecosystem with idiomatic Rust patterns and modern async/await support.
 
 ## Project Documentation
 
@@ -31,8 +31,8 @@ This SDK aims to provide a comprehensive Rust interface for Pi Network APIs, bas
 
 ### Reference Materials
 
-- [Pi Network C# SDK](https://github.com/pi-apps/pi-platform-docs/tree/master/SDK) - Official reference implementation
-- [Pi Platform APIs Documentation](https://pi-platform-docs.vercel.app/) - Official API documentation
+- [Pi Network C# SDK](https://github.com/pi-apps/pi-csharp#) - Official reference implementation
+- [Pi Platform APIs Documentation](https://pi-apps.github.io/community-developer-guide/docs/gettingStarted/piAppPlatform/piAppPlatformAPIs/) - Official API documentation
 - **API Base URL**: `https://api.minepi.com/v2`
 - **Supported Endpoints**:
   - `GET /me` - Get user information (requires Bearer token)
@@ -180,8 +180,8 @@ Unless you explicitly state otherwise, any contribution intentionally submitted 
 ## 📞 Support
 
 - 📖 **Documentation**: [docs.rs/pi-rust](https://docs.rs/pi-rust)
-- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/username/pi-rust/issues)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/username/pi-rust/discussions)
+- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/pi-apps/pi-rust/issues)
+- 💬 **Discussions**: [GitHub Discussions](https://github.com/pi-apps/pi-rust/discussions)
 - 📧 **Email**: [support@example.com](mailto:support@example.com)
 
 ---

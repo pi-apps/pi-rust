@@ -41,23 +41,16 @@
     - `src/payments/mod.rs` - Payment operations module
     - `src/auth/mod.rs` - Authentication module
     - `src/stellar/mod.rs` - Stellar operations module
-  - **Set up GitHub Actions**: Create `.github/workflows/ci.yml` with basic Rust CI pipeline:
-    ```yaml
-    name: CI
-    on: [push, pull_request]
-    jobs:
-      test:
-        runs-on: ubuntu-latest
-        steps:
-          - uses: actions/checkout@v3
-          - uses: actions-rs/toolchain@v1
-            with:
-              toolchain: stable
-          - run: cargo build
-          - run: cargo test
-          - run: cargo clippy -- -D warnings
-          - run: cargo fmt -- --check
-    ```
+  - **Set up GitHub Actions**: Create separate workflow files for better organization:
+    - `.github/workflows/check.yml` - Cargo check validation
+    - `.github/workflows/test.yml` - Unit and integration tests
+    - `.github/workflows/lint.yml` - Rustfmt and Clippy checks
+    - `.github/workflows/docs.yml` - Documentation building and deployment
+    - `.github/workflows/security.yml` - Security audits and unsafe code checks
+    - `.github/workflows/coverage.yml` - Code coverage reporting
+    - `.github/workflows/benchmark.yml` - Performance benchmarks
+    - `.github/workflows/msrv.yml` - Minimum Supported Rust Version validation
+    - `.github/workflows/ci-status.yml` - Overall CI status aggregation
   - _Requirements: 7.1, 7.2, 11.1, 11.2, 11.3_
 
 - [ ] 2. Implement core error handling and configuration
