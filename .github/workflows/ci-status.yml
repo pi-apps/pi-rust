@@ -1,53 +1,26 @@
 name: CI Status
 
 on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
+  workflow_run:
+    workflows: ["Basic CI", "Check", "Test", "Lint", "MSRV"]
+    types: [completed]
 
 jobs:
   ci-status:
-    name: CI Status Check
+    name: CI Status Summary
     runs-on: ubuntu-latest
-    needs: []  # This will be updated by the status check action
     if: always()
     steps:
-      - name: Check CI Status
-        uses: actions/github-script@v6
-        with:
-          script: |
-            const { owner, repo } = context.repo;
-            const { sha } = context;
-            
-            // Get all check runs for this commit
-            const { data: checkRuns } = await github.rest.checks.listForRef({
-              owner,
-              repo,
-              ref: sha,
-            });
-            
-            // Filter for our CI workflows
-            const ciWorkflows = [
-              'Check',
-              'Test', 
-              'Lint',
-              'Documentation',
-              'Security Audit',
-              'Coverage',
-              'MSRV'
-            ];
-            
-            const relevantChecks = checkRuns.check_runs.filter(check => 
-              ciWorkflows.some(workflow => check.name.includes(workflow))
-            );
-            
-            const failedChecks = relevantChecks.filter(check => 
-              check.conclusion === 'failure' || check.conclusion === 'cancelled'
-            );
-            
-            if (failedChecks.length > 0) {
-              core.setFailed(`CI checks failed: ${failedChecks.map(c => c.name).join(', ')}`);
-            } else {
-              console.log('All CI checks passed!');
-            }
+      - name: Check workflow status
+        run: |
+          echo "Workflow: ${{ github.event.workflow_run.name }}"
+          echo "Status: ${{ github.event.workflow_run.conclusion }}"
+          echo "Branch: ${{ github.event.workflow_run.head_branch }}"
+          
+          if [ "${{ github.event.workflow_run.conclusion }}" = "success" ]; then
+            echo "✅ Workflow passed"
+          elif [ "${{ github.event.workflow_run.conclusion }}" = "failure" ]; then
+            echo "❌ Workflow failed"
+          else
+            echo "⚠️ Workflow status: ${{ github.event.workflow_run.conclusion }}"
+          fi

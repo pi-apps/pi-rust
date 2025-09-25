@@ -39,4 +39,9 @@ jobs:
         run: cargo test --lib --all-features
 
       - name: Run integration tests
-        run: cargo test --test integration_tests --all-features
+        run: |
+          if [ -d "tests" ] && [ "$(find tests -name "*.rs" | wc -l)" -gt 0 ]; then
+            cargo test --test integration_tests --all-features
+          else
+            echo "No integration tests found, skipping..."
+          fi

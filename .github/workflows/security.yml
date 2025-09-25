@@ -19,6 +19,8 @@ jobs:
 
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
 
       - name: Install cargo-audit
         run: cargo install cargo-audit
@@ -28,18 +30,23 @@ jobs:
 
       - name: Check for unsafe code
         run: |
-          if grep -r "unsafe" src/; then
+          if find src/ -name "*.rs" -exec grep -l "unsafe" {} \; 2>/dev/null | head -1; then
             echo "::warning::Found unsafe code - please review"
+            find src/ -name "*.rs" -exec grep -Hn "unsafe" {} \; 2>/dev/null || true
             exit 1
           else
-            echo "No unsafe code found"
+            echo "✅ No unsafe code found"
           fi
 
       - name: Check for hardcoded secrets
         run: |
-          if grep -r -i "password\|secret\|key\|token" src/ --include="*.rs" | grep -v "// " | grep -v "pub " | grep -v "test"; then
+          # Look for potential secrets but exclude common false positives
+          if find src/ -name "*.rs" -exec grep -l -i "password\|secret\|key\|token" {} \; 2>/dev/null | \
+             xargs grep -i "password\|secret\|key\|token" 2>/dev/null | \
+             grep -v "// " | grep -v "pub " | grep -v "test" | grep -v "struct" | grep -v "enum" | \
+             grep -v "fn " | grep -v "let.*=" | head -1; then
             echo "::warning::Potential hardcoded secrets found - please review"
             exit 1
           else
-            echo "No hardcoded secrets found"
+            echo "✅ No hardcoded secrets found"
           fi

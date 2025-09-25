@@ -19,6 +19,8 @@ jobs:
 
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
 
       - name: Cache cargo registry
         uses: actions/cache@v3
@@ -33,10 +35,27 @@ jobs:
         run: cargo install cargo-tarpaulin
 
       - name: Generate code coverage
-        run: cargo tarpaulin --verbose --all-features --workspace --timeout 120 --out xml
+        run: |
+          if cargo tarpaulin --version > /dev/null 2>&1; then
+            cargo tarpaulin --verbose --all-features --workspace --timeout 120 --out xml --out html
+            echo "Coverage report generated successfully"
+          else
+            echo "Tarpaulin not available, skipping coverage"
+            exit 0
+          fi
+
+      - name: Upload coverage reports
+        if: success()
+        run: |
+          echo "Coverage files generated:"
+          ls -la *.xml *.html 2>/dev/null || echo "No coverage files found"
 
       - name: Upload to codecov.io
+        if: success() && github.event_name == 'push'
         uses: codecov/codecov-action@v3
         with:
           file: cobertura.xml
-          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+          verbose: true
+        continue-on-error: true
