@@ -177,9 +177,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo install cargo-audit
-      - run: cargo audit
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run security audit
+        run: cargo audit
+
       - name: Check for unsafe code
         run: |
           if find src/ -name "*.rs" -exec grep -l "unsafe" {} \; 2>/dev/null | head -1; then
@@ -189,16 +195,17 @@ jobs:
           else
             echo "✅ No unsafe code found"
           fi
+
       - name: Check for hardcoded secrets
         run: |
-          if find src/ -name "*.rs" -exec grep -l -i "password\|secret\|key\|token" {} \; 2>/dev/null | \
-             xargs grep -i "password\|secret\|key\|token" 2>/dev/null | \
-             grep -v "// " | grep -v "pub " | grep -v "test" | grep -v "struct" | grep -v "enum" | \
-             grep -v "fn " | grep -v "let.*=" | head -1; then
-            echo "::warning::Potential hardcoded secrets found - please review"
-            exit 1
+          if grep -Rni --include="*.rs" -E 'let[[:space:]]+[a-zA-Z0-9_]*[[:space:]]*=[[:space:]]*"[^"]+"' src/ | \
+             grep -i "password\|secret\|key\|token" | head -1; then
+            echo "::warning::Hardcoded secret string found - please review"
+            grep -Rni --include="*.rs" -E 'let[[:space:]]+[a-zA-Z0-9_]*[[:space:]]*=[[:space:]]*"[^"]+"' src/ | \
+              grep -i "password\|secret\|key\|token" || true
+            exit 1   # fail only if literal value is assigned
           else
-            echo "✅ No hardcoded secrets found"
+            echo "✅ No obvious hardcoded secrets found"
           fi
 
   # ----------------------------
