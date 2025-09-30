@@ -190,7 +190,7 @@ jobs:
         run: |
           echo "Checking for unsafe code..."
           unsafe_files=$(find src/ -name "*.rs" -exec grep -l "unsafe" {} \; 2>/dev/null || true)
-          
+
           if [ -n "$unsafe_files" ]; then
             echo "::warning::Found unsafe code - please review"
             echo "Files containing unsafe code:"
@@ -209,13 +209,13 @@ jobs:
         run: |
           # Look for hardcoded secrets - more targeted approach
           echo "Checking for hardcoded secrets..."
-          
+
           # Check for suspicious variable names with string assignments
           secret_vars=$(find src/ -name "*.rs" -exec grep -Hn -iE "(let|const)[[:space:]]+[a-zA-Z0-9_]*(password|secret|key|token|api_key|auth_token)[a-zA-Z0-9_]*[[:space:]]*[:=][[:space:]]*\"[^\"]+\"" {} \; 2>/dev/null || true)
-          
+
           # Check for common secret patterns
           secret_strings=$(find src/ -name "*.rs" -exec grep -Hn -E "\"(sk_|pk_|AIza|ya29\.|AKIA|[a-f0-9]{32,64})\"" {} \; 2>/dev/null || true)
-          
+
           if [ -n "$secret_vars" ] || [ -n "$secret_strings" ]; then
             echo "::warning::Potential hardcoded secret found - please review"
             [ -n "$secret_vars" ] && echo "Variables:" && echo "$secret_vars"
