@@ -229,7 +229,7 @@ jobs:
           fi
 
   # ----------------------------
-  # CI Summary (Markdown table in UI)
+  # CI Summary (Markdown dashboard)
   # ----------------------------
   summary:
     name: CI Status Summary
@@ -252,24 +252,69 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Job | Result |" >> $GITHUB_STEP_SUMMARY
           echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
-          for job in fmt clippy check test msrv docs benchmark security_audit; do
-            status="${{ needs[job].result }}"
-            if [ "$status" = "success" ]; then
-              echo "| $job | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
-            elif [ "$status" = "failure" ]; then
-              echo "| $job | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
-            else
-              echo "| $job | ⚠️ $status |" >> $GITHUB_STEP_SUMMARY
-            fi
-          done
 
-          # Special handling for coverage
+          # Helper to display emojis
+          get_status_display() {
+            case "$1" in
+              "success") echo "✅ Passed" ;;
+              "failure") echo "❌ Failed" ;;
+              "cancelled") echo "🚫 Cancelled" ;;
+              "skipped") echo "⏭️ Skipped" ;;
+              *) echo "⚠️ $1" ;;
+            esac
+          }
+
+          # Track totals
+          total_jobs=0
+          passed_jobs=0
+          failed_jobs=0
+          skipped_jobs=0
+          cancelled_jobs=0
+
+          # Function to record results
+          add_row() {
+            job=$1
+            status=$2
+            extra=$3
+            display=$(get_status_display "$status")
+            echo "| $job | $display $extra |" >> $GITHUB_STEP_SUMMARY
+
+            total_jobs=$((total_jobs+1))
+            case "$status" in
+              success) passed_jobs=$((passed_jobs+1)) ;;
+              failure) failed_jobs=$((failed_jobs+1)) ;;
+              skipped) skipped_jobs=$((skipped_jobs+1)) ;;
+              cancelled) cancelled_jobs=$((cancelled_jobs+1)) ;;
+            esac
+          }
+
+          # Individual job rows
+          add_row "fmt" "${{ needs.fmt.result }}"
+          add_row "clippy" "${{ needs.clippy.result }}" "(${{ needs.clippy.outputs.warnings }} warnings)"
+          add_row "check" "${{ needs.check.result }}"
+
+          test_status="${{ needs.test.result }}"
+          test_passed="${{ needs.test.outputs.passed }}"
+          test_failed="${{ needs.test.outputs.failed }}"
+          add_row "test" "$test_status" "($test_passed passed, $test_failed failed)"
+
+          add_row "msrv" "${{ needs.msrv.result }}"
+          add_row "docs" "${{ needs.docs.result }}"
+          add_row "benchmark" "${{ needs.benchmark.result }}"
+          add_row "security_audit" "${{ needs.security_audit.result }}"
+
           cov_status="${{ needs.coverage.result }}"
           cov_percent="${{ needs.coverage.outputs.coverage }}"
           if [ "$cov_status" = "success" ]; then
-            echo "| coverage | ✅ ${cov_percent}% |" >> $GITHUB_STEP_SUMMARY
-          elif [ "$cov_status" = "failure" ]; then
-            echo "| coverage | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+            add_row "coverage" "$cov_status" "(${cov_percent}%)"
           else
-            echo "| coverage | ⚠️ $cov_status |" >> $GITHUB_STEP_SUMMARY
+            add_row "coverage" "$cov_status"
           fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📝 Overall Result" >> $GITHUB_STEP_SUMMARY
+          echo "- Total jobs: $total_jobs" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Passed: $passed_jobs" >> $GITHUB_STEP_SUMMARY
+          echo "- ❌ Failed: $failed_jobs" >> $GITHUB_STEP_SUMMARY
+          echo "- ⏭️ Skipped: $skipped_jobs" >> $GITHUB_STEP_SUMMARY
+          echo "- 🚫 Cancelled: $cancelled_jobs" >> $GITHUB_STEP_SUMMARY
