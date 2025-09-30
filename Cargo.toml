@@ -20,6 +20,5 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
 
 [dev-dependencies]
-wiremock = "0.6"
 criterion = "0.5"
 tokio-test = "0.4"
