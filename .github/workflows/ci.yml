@@ -1,20 +1,248 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    - cron: '0 2 * * *' # security audit daily at 2 AM UTC
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
 
 jobs:
-  test:
+  # ----------------------------
+  # Formatting
+  # ----------------------------
+  fmt:
+    name: Rustfmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-          components: clippy, rustfmt
+          components: rustfmt
+      - run: cargo fmt --all -- --check
 
+  # ----------------------------
+  # Clippy linter
+  # ----------------------------
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+
+  # ----------------------------
+  # Cargo Check
+  # ----------------------------
+  check:
+    name: Cargo Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --all-targets --all-features
+
+  # ----------------------------
+  # Test suite (matrix: stable, beta, msrv)
+  # ----------------------------
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust: [stable, beta, 1.84.0] # MSRV bumped
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --lib --all-features
+      - run: |
+          if [ -d "tests" ] && [ "$(find tests -name "*.rs" | wc -l)" -gt 0 ]; then
+            cargo test --test integration_tests --all-features
+          else
+            echo "No integration tests found, skipping..."
+          fi
+
+  # ----------------------------
+  # MSRV job (explicit check + test)
+  # ----------------------------
+  msrv:
+    name: MSRV (1.84.0)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.84.0
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --all-targets --all-features
+      - run: cargo test --all-features
+
+  # ----------------------------
+  # Coverage
+  # ----------------------------
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    outputs:
+      coverage: ${{ steps.extract.outputs.coverage }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
-      - run: cargo test --all --all-features
-      - run: cargo clippy --all --all-features -- -D warnings
-      - run: cargo fmt --all -- --check
+      - name: Install cargo-tarpaulin
+        run: cargo install cargo-tarpaulin
+
+      - name: Generate code coverage
+        run: cargo tarpaulin --verbose --all-features --workspace --timeout 120 --out xml --out html
+
+      - name: Extract coverage percentage
+        id: extract
+        run: |
+          if [ -f cobertura.xml ]; then
+            percent=$(xmllint --xpath "string(//coverage/@line-rate)" cobertura.xml 2>/dev/null || echo "0")
+            percent=$(awk "BEGIN {printf \"%.2f\", $percent * 100}")
+            echo "coverage=$percent" >> $GITHUB_OUTPUT
+          else
+            echo "coverage=0" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: |
+            cobertura.xml
+            tarpaulin-report.html
+          retention-days: 7
+
+  # ----------------------------
+  # Documentation
+  # ----------------------------
+  docs:
+    name: Documentation Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo doc --no-deps --document-private-items --all-features
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+      - if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./target/doc
+
+  # ----------------------------
+  # Benchmark
+  # ----------------------------
+  benchmark:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: |
+          if [ -d "benches" ] && [ "$(find benches -name "*.rs" | wc -l)" -gt 0 ]; then
+            cargo bench --all-features
+          else
+            echo "No benchmarks found, skipping..."
+            exit 0
+          fi
+
+  # ----------------------------
+  # Security Audit
+  # ----------------------------
+  security_audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo install cargo-audit
+      - run: cargo audit
+      - name: Check for unsafe code
+        run: |
+          if find src/ -name "*.rs" -exec grep -l "unsafe" {} \; 2>/dev/null | head -1; then
+            echo "::warning::Found unsafe code - please review"
+            find src/ -name "*.rs" -exec grep -Hn "unsafe" {} \; 2>/dev/null || true
+            exit 0   # warn only, don't fail
+          else
+            echo "✅ No unsafe code found"
+          fi
+      - name: Check for hardcoded secrets
+        run: |
+          if find src/ -name "*.rs" -exec grep -l -i "password\|secret\|key\|token" {} \; 2>/dev/null | \
+             xargs grep -i "password\|secret\|key\|token" 2>/dev/null | \
+             grep -v "// " | grep -v "pub " | grep -v "test" | grep -v "struct" | grep -v "enum" | \
+             grep -v "fn " | grep -v "let.*=" | head -1; then
+            echo "::warning::Potential hardcoded secrets found - please review"
+            exit 1
+          else
+            echo "✅ No hardcoded secrets found"
+          fi
+
+  # ----------------------------
+  # CI Summary (Markdown table in UI)
+  # ----------------------------
+  summary:
+    name: CI Status Summary
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - fmt
+      - clippy
+      - check
+      - test
+      - msrv
+      - coverage
+      - docs
+      - benchmark
+      - security_audit
+    steps:
+      - name: Generate job summary
+        run: |
+          echo "## 📊 CI Workflow Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Result |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          for job in fmt clippy check test msrv docs benchmark security_audit; do
+            status="${{ needs[job].result }}"
+            if [ "$status" = "success" ]; then
+              echo "| $job | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+            elif [ "$status" = "failure" ]; then
+              echo "| $job | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| $job | ⚠️ $status |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
+          # Special handling for coverage
+          cov_status="${{ needs.coverage.result }}"
+          cov_percent="${{ needs.coverage.outputs.coverage }}"
+          if [ "$cov_status" = "success" ]; then
+            echo "| coverage | ✅ ${cov_percent}% |" >> $GITHUB_STEP_SUMMARY
+          elif [ "$cov_status" = "failure" ]; then
+            echo "| coverage | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| coverage | ⚠️ $cov_status |" >> $GITHUB_STEP_SUMMARY
+          fi

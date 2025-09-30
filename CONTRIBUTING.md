@@ -43,16 +43,16 @@ Thank you for your interest in contributing to the Pi Network Rust SDK! This pro
 
 Before contributing, please familiarize yourself with:
 
-1. **[Requirements Document](.kiro/specs/pi-rust-sdk/requirements.md)** - What the SDK needs to accomplish
-2. **[Design Document](.kiro/specs/pi-rust-sdk/design.md)** - How the SDK will be architected
-3. **[Implementation Tasks](.kiro/specs/pi-rust-sdk/tasks.md)** - Detailed breakdown of work to be done
-4. **[Pi Network C# SDK](https://github.com/pi-apps/pi-platform-docs/tree/master/SDK)** - Reference implementation
+1. **[Requirements Document](.specs/requirements.md)** - What the SDK needs to accomplish
+2. **[Design Document](.specs/design.md)** - How the SDK will be architected
+3. **[Implementation Tasks](.specs/tasks.md)** - Detailed breakdown of work to be done
+4. **[Pi Network C# SDK](https://github.com/pi-apps/pi-csharp#)** - Reference implementation
 
 ## How to Contribute
 
 ### 1. Choose a Task
 
-Browse the [Implementation Tasks](.kiro/specs/pi-rust-sdk/tasks.md) document to find something that matches your skill level:
+Browse the [Implementation Tasks](.specs/tasks.md) document to find something that matches your skill level:
 
 - **Beginner-friendly tasks**:
   - Project setup (Cargo.toml, basic structure)
