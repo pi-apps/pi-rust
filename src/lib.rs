@@ -7,7 +7,6 @@ pub mod horizon;
 #[cfg(test)]
 mod tests {
 
-
     use super::*;
 
     #[test]
@@ -16,5 +15,3 @@ mod tests {
         assert_eq!(result, 4);
     }
 }
-
-
