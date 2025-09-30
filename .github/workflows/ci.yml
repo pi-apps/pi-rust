@@ -290,11 +290,13 @@ jobs:
 
           # Individual job rows
           add_row "fmt" "${{ needs.fmt.result }}"
-          add_row "clippy" "${{ needs.clippy.result }}"
+          add_row "clippy" "${{ needs.clippy.result }}" "(${{ needs.clippy.outputs.warnings }} warnings)"
           add_row "check" "${{ needs.check.result }}"
 
           test_status="${{ needs.test.result }}"
-          add_row "test" "$test_status"
+          test_passed="${{ needs.test.outputs.passed }}"
+          test_failed="${{ needs.test.outputs.failed }}"
+          add_row "test" "$test_status" "($test_passed passed, $test_failed failed)"
 
           add_row "msrv" "${{ needs.msrv.result }}"
           add_row "docs" "${{ needs.docs.result }}"
