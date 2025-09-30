@@ -252,24 +252,44 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Job | Result |" >> $GITHUB_STEP_SUMMARY
           echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
-          for job in fmt clippy check test msrv docs benchmark security_audit; do
-            status="${{ needs[job].result }}"
-            if [ "$status" = "success" ]; then
-              echo "| $job | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
-            elif [ "$status" = "failure" ]; then
-              echo "| $job | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
-            else
-              echo "| $job | ⚠️ $status |" >> $GITHUB_STEP_SUMMARY
-            fi
-          done
+
+          # Individual job status checks
+          fmt_status="${{ needs.fmt.result }}"
+          clippy_status="${{ needs.clippy.result }}"
+          check_status="${{ needs.check.result }}"
+          test_status="${{ needs.test.result }}"
+          msrv_status="${{ needs.msrv.result }}"
+          docs_status="${{ needs.docs.result }}"
+          benchmark_status="${{ needs.benchmark.result }}"
+          security_audit_status="${{ needs.security_audit.result }}"
+
+          # Function to get status emoji
+          get_status_display() {
+            case "$1" in
+              "success") echo "✅ Passed" ;;
+              "failure") echo "❌ Failed" ;;
+              "cancelled") echo "🚫 Cancelled" ;;
+              "skipped") echo "⏭️ Skipped" ;;
+              *) echo "⚠️ $1" ;;
+            esac
+          }
+
+          echo "| fmt | $(get_status_display "$fmt_status") |" >> $GITHUB_STEP_SUMMARY
+          echo "| clippy | $(get_status_display "$clippy_status") |" >> $GITHUB_STEP_SUMMARY
+          echo "| check | $(get_status_display "$check_status") |" >> $GITHUB_STEP_SUMMARY
+          echo "| test | $(get_status_display "$test_status") |" >> $GITHUB_STEP_SUMMARY
+          echo "| msrv | $(get_status_display "$msrv_status") |" >> $GITHUB_STEP_SUMMARY
+          echo "| docs | $(get_status_display "$docs_status") |" >> $GITHUB_STEP_SUMMARY
+          echo "| benchmark | $(get_status_display "$benchmark_status") |" >> $GITHUB_STEP_SUMMARY
+          echo "| security_audit | $(get_status_display "$security_audit_status") |" >> $GITHUB_STEP_SUMMARY
 
           # Special handling for coverage
           cov_status="${{ needs.coverage.result }}"
-          cov_percent="${{ needs.coverage.outputs.coverage }}"
+          cov_percent="${{ needs.coverage.outputs.coverage || '0.00' }}"
           if [ "$cov_status" = "success" ]; then
             echo "| coverage | ✅ ${cov_percent}% |" >> $GITHUB_STEP_SUMMARY
           elif [ "$cov_status" = "failure" ]; then
             echo "| coverage | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| coverage | ⚠️ $cov_status |" >> $GITHUB_STEP_SUMMARY
+            echo "| coverage | $(get_status_display "$cov_status") |" >> $GITHUB_STEP_SUMMARY
           fi
